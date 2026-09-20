@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .env.local
+.env.sync
 *.log
 .DS_Store
 .vite/

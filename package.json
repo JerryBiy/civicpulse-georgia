@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.js"
+    "start": "node server.js",
+    "sync:data": "node --env-file=.env.sync scripts/sync-public-data.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
