@@ -49,7 +49,7 @@ The optional import script copies only shared provider data. It does not copy
 users, teams, notes, analysis, email lists, or other staff information.
 
 1. Copy `.env.sync.example` to `.env.sync`.
-2. Add service-role credentials for the LegiPulse source project and the new
+2. Add a backend secret key for the LegiPulse source project and the new
    CivicPulse target project. Never use these keys in `VITE_` variables or
    expose them to browser code.
 3. Run:

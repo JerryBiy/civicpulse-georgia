@@ -2,9 +2,9 @@ import { createClient } from "@supabase/supabase-js";
 
 const required = [
   "SOURCE_SUPABASE_URL",
-  "SOURCE_SUPABASE_SERVICE_ROLE_KEY",
+  "SOURCE_SUPABASE_SECRET_KEY",
   "TARGET_SUPABASE_URL",
-  "TARGET_SUPABASE_SERVICE_ROLE_KEY",
+  "TARGET_SUPABASE_SECRET_KEY",
 ];
 
 const missing = required.filter((name) => !process.env[name]);
@@ -21,12 +21,12 @@ const options = {
 };
 const source = createClient(
   process.env.SOURCE_SUPABASE_URL,
-  process.env.SOURCE_SUPABASE_SERVICE_ROLE_KEY,
+  process.env.SOURCE_SUPABASE_SECRET_KEY,
   options,
 );
 const target = createClient(
   process.env.TARGET_SUPABASE_URL,
-  process.env.TARGET_SUPABASE_SERVICE_ROLE_KEY,
+  process.env.TARGET_SUPABASE_SECRET_KEY,
   options,
 );
 
