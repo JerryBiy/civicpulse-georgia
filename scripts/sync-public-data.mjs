@@ -59,8 +59,8 @@ async function restRequest(project, path, options = {}) {
     throw new Error(`Supabase REST request failed (${response.status}): ${detail}`);
   }
 
-  if (response.status === 204) return null;
-  return response.json();
+  const body = await response.text();
+  return body ? JSON.parse(body) : null;
 }
 
 async function readAll(table, select, { filters = [], order = [] } = {}) {
