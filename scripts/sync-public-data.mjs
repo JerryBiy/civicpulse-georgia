@@ -1,5 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
-
 const required = [
   "SOURCE_SUPABASE_URL",
   "SOURCE_SUPABASE_SECRET_KEY",
@@ -16,19 +14,14 @@ if (process.env.SOURCE_SUPABASE_URL === process.env.TARGET_SUPABASE_URL) {
   throw new Error("Source and target Supabase URLs must be different projects.");
 }
 
-const options = {
-  auth: { persistSession: false, autoRefreshToken: false },
+const source = {
+  url: process.env.SOURCE_SUPABASE_URL.replace(/\/$/, ""),
+  key: process.env.SOURCE_SUPABASE_SECRET_KEY,
 };
-const source = createClient(
-  process.env.SOURCE_SUPABASE_URL,
-  process.env.SOURCE_SUPABASE_SECRET_KEY,
-  options,
-);
-const target = createClient(
-  process.env.TARGET_SUPABASE_URL,
-  process.env.TARGET_SUPABASE_SECRET_KEY,
-  options,
-);
+const target = {
+  url: process.env.TARGET_SUPABASE_URL.replace(/\/$/, ""),
+  key: process.env.TARGET_SUPABASE_SECRET_KEY,
+};
 
 const PAGE_SIZE = 500;
 const importedAt = new Date().toISOString();
@@ -51,16 +44,49 @@ function publicBillPayload(payload) {
   );
 }
 
-async function readAll(table, select, configure) {
+async function restRequest(project, path, options = {}) {
+  const response = await fetch(`${project.url}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: project.key,
+      Authorization: `Bearer ${project.key}`,
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Supabase REST request failed (${response.status}): ${detail}`);
+  }
+
+  if (response.status === 204) return null;
+  return response.json();
+}
+
+async function readAll(table, select, { filters = [], order = [] } = {}) {
   const rows = [];
   for (let offset = 0; ; offset += PAGE_SIZE) {
-    let query = source
-      .from(table)
-      .select(select)
-      .range(offset, offset + PAGE_SIZE - 1);
-    query = configure(query);
-    const { data, error } = await query;
-    if (error) throw new Error(`Could not read ${table}: ${error.message}`);
+    const params = new URLSearchParams({
+      select,
+      limit: String(PAGE_SIZE),
+      offset: String(offset),
+    });
+    for (const [column, operator, value] of filters) {
+      params.append(column, `${operator}.${value}`);
+    }
+    if (order.length) {
+      params.set(
+        "order",
+        order.map(([column, direction]) => `${column}.${direction}`).join(","),
+      );
+    }
+
+    let data;
+    try {
+      data = await restRequest(source, `${table}?${params}`);
+    } catch (error) {
+      throw new Error(`Could not read ${table}: ${error.message}`);
+    }
     rows.push(...(data || []));
     if (!data || data.length < PAGE_SIZE) return rows;
   }
@@ -70,8 +96,19 @@ async function upsertBatches(table, rows, onConflict) {
   let written = 0;
   for (let offset = 0; offset < rows.length; offset += PAGE_SIZE) {
     const batch = rows.slice(offset, offset + PAGE_SIZE);
-    const { error } = await target.from(table).upsert(batch, { onConflict });
-    if (error) throw new Error(`Could not write ${table}: ${error.message}`);
+    const params = new URLSearchParams({ on_conflict: onConflict });
+    try {
+      await restRequest(target, `${table}?${params}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify(batch),
+      });
+    } catch (error) {
+      throw new Error(`Could not write ${table}: ${error.message}`);
+    }
     written += batch.length;
   }
   return written;
@@ -81,7 +118,10 @@ async function syncSessions() {
   const rows = await readAll(
     "bill_session_sync_state",
     "state,session_id,dataset_hash,session_name,year_start,year_end,is_special,is_prior,is_sine_die,bill_count,last_synced_at",
-    (query) => query.eq("state", "GA").order("session_id", { ascending: true }),
+    {
+      filters: [["state", "eq", "GA"]],
+      order: [["session_id", "asc"]],
+    },
   );
   return upsertBatches(
     "civic_sessions",
@@ -107,9 +147,10 @@ async function syncBills() {
   const rows = await readAll(
     "legislative_bill_cache",
     "state,session_id,bill_number,legiscan_id,payload,updated_at",
-    (query) => query.eq("state", "GA")
-      .order("session_id", { ascending: true })
-      .order("bill_number", { ascending: true }),
+    {
+      filters: [["state", "eq", "GA"]],
+      order: [["session_id", "asc"], ["bill_number", "asc"]],
+    },
   );
   return upsertBatches(
     "civic_bills",
@@ -130,10 +171,10 @@ async function syncMeetings() {
   const rows = await readAll(
     "ga_meetings_cache",
     "state,session_id,id,legis_id,title,description,start_time,end_time,all_day,color,location,classification,chamber,video_url,agenda_url,schedule_url,will_broadcast,is_vimeo,data,updated_at",
-    (query) => query.eq("state", "GA")
-      .gt("session_id", 0)
-      .order("session_id", { ascending: true })
-      .order("start_time", { ascending: true }),
+    {
+      filters: [["state", "eq", "GA"], ["session_id", "gt", 0]],
+      order: [["session_id", "asc"], ["start_time", "asc"]],
+    },
   );
   return upsertBatches(
     "civic_meetings",
