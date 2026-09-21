@@ -43,23 +43,41 @@ The migration creates CivicPulse-owned session, bill, and meeting tables. Only
 three security-definer read functions are exposed to anonymous users. Direct
 table access is denied.
 
-### Copy public data from LegiPulse
+### Independent legislative-data sync
 
-The optional import script copies only shared provider data. It does not copy
-users, teams, notes, analysis, email lists, or other staff information.
+CivicPulse does not read from or write to the LegiPulse database. Its updater
+reads bill and session data directly from LegiScan, reads meeting information
+directly from the Georgia General Assembly, and writes only to the dedicated
+CivicPulse Supabase project.
 
 1. Copy `.env.sync.example` to `.env.sync`.
-2. Add a backend secret key for the LegiPulse source project and the new
-   CivicPulse target project. Never use these keys in `VITE_` variables or
-   expose them to browser code.
-3. Run:
+2. Add a server-side LegiScan API key and the CivicPulse project's backend
+   secret key. Never put either key in a `VITE_` variable or expose it to
+   browser code.
+3. Run the updater manually when needed:
 
 ```bash
 npm run sync:data
 ```
 
-The script refuses to run when source and target URLs are identical. It upserts
-public session, bill, and meeting snapshots so archived data stays available.
+The updater refreshes every active regular or special session. Historical
+sessions remain stored and are downloaded again only when LegiScan's
+`dataset_hash` reports an archive correction. Bill writes are further limited
+to new or changed `change_hash` values. Meetings for active sessions are
+refreshed from the official Georgia schedule.
+
+### Automatic updates
+
+`.github/workflows/sync-legislative-data.yml` runs the same updater every six
+hours and can also be started manually from the GitHub Actions page. Add these
+repository secrets before enabling it:
+
+- `LEGISCAN_API_KEY`
+- `CIVICPULSE_SUPABASE_URL`
+- `CIVICPULSE_SUPABASE_SECRET_KEY`
+
+The scheduled job has no LegiPulse credentials and no connection to the
+LegiPulse Supabase project.
 
 Without these settings, the app intentionally uses the included representative demo dataset so design and product development can continue safely.
 

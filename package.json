@@ -11,7 +11,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server.js",
-    "sync:data": "node --env-file=.env.sync scripts/sync-public-data.mjs"
+    "sync:data": "node scripts/sync-legislative-data.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
